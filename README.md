@@ -14,20 +14,34 @@ A Model Context Protocol (MCP) server for [Focalboard](https://github.com/matter
 
 ### Option 1: Using Claude CLI (Recommended)
 
-The easiest way to install is using the Claude CLI:
+The easiest way to install is using the Claude CLI with npx:
 
 ```bash
-# From local directory
-claude mcp add /path/to/focalboard-mcp-server
-
-# Or from GitHub
-claude mcp add https://github.com/gmjuhasz/focalboard-mcp-server
+claude mcp add --transport stdio focalboard \
+  --env FOCALBOARD_HOST=https://your-focalboard-instance.com \
+  --env FOCALBOARD_USERNAME=your-username \
+  --env FOCALBOARD_PASSWORD=your-password \
+  -- npx -y github:gmjuhasz/focalboard-mcp-server
 ```
 
-After adding, you'll be prompted to configure the environment variables:
+Replace the environment variable values with your actual Focalboard credentials:
 - `FOCALBOARD_HOST`: Your Focalboard instance URL (e.g., `https://focalboard.example.com`)
 - `FOCALBOARD_USERNAME`: Your Focalboard username or email
 - `FOCALBOARD_PASSWORD`: Your Focalboard password
+
+Alternatively, if you've cloned the repository locally:
+
+```bash
+cd /path/to/focalboard-mcp-server
+npm install
+npm run build
+
+claude mcp add --transport stdio focalboard \
+  --env FOCALBOARD_HOST=https://your-focalboard-instance.com \
+  --env FOCALBOARD_USERNAME=your-username \
+  --env FOCALBOARD_PASSWORD=your-password \
+  -- node /absolute/path/to/focalboard-mcp-server/build/index.js
+```
 
 ### Option 2: Manual Installation
 
