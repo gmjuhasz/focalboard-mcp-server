@@ -6,6 +6,8 @@ A Model Context Protocol (MCP) server for [Focalboard](https://github.com/matter
 
 - **Board Management**: List, search, and view board details
 - **Card Operations**: Create, read, update, and delete cards/tasks
+- **Description Support**: Add and update card descriptions with full markdown support
+- **Content Management**: View and manage card content blocks (descriptions, text, etc.)
 - **User-Friendly**: Use human-readable column and property names (no need for IDs)
 - **Auto-Authentication**: Automatically handles login and session management
 - **Column Movement**: Easily move cards between columns with simple property updates
@@ -132,16 +134,17 @@ Search for boards with "project" in the name
 ### Card/Task Operations
 
 #### `create_card`
-Create a new card (task) in a board.
+Create a new card (task) in a board with optional description.
 
 **Parameters:**
 - `boardId` (required): The board ID
 - `title` (required): Card title
 - `properties` (optional): Property values as key-value pairs using property names
+- `description` (optional): Card description in markdown format
 
 **Example:**
 ```
-Create a card titled "Implement login feature" in board abc123 with Status "To Do" and Priority "High"
+Create a card titled "Implement login feature" in board abc123 with Status "To Do" and Priority "High" and description "Add OAuth2 authentication with Google and GitHub providers"
 ```
 
 #### `get_cards`
@@ -169,17 +172,18 @@ Get details for card xyz789
 ```
 
 #### `update_card`
-Update a card's properties, including moving it between columns.
+Update a card's properties, title, and/or description.
 
 **Parameters:**
 - `cardId` (required): The card ID
 - `boardId` (required): The board ID
 - `title` (optional): New title
 - `properties` (optional): Property values to update using property names
+- `description` (optional): Update or set the card description in markdown format
 
 **Example:**
 ```
-Update card xyz789 in board abc123, move it to "In Progress" status
+Update card xyz789 in board abc123, move it to "In Progress" status and add description "Currently implementing the authentication flow"
 ```
 
 **Moving Cards Between Columns:**
@@ -199,6 +203,30 @@ Delete a card permanently.
 **Example:**
 ```
 Delete card xyz789 from board abc123
+```
+
+#### `add_card_description`
+Add or update the description of an existing card.
+
+**Parameters:**
+- `cardId` (required): The card ID
+- `boardId` (required): The board ID
+- `description` (required): The description content in markdown format
+
+**Example:**
+```
+Add description to card xyz789: "This task involves implementing user authentication with JWT tokens"
+```
+
+#### `get_card_content`
+Get all content blocks (descriptions, text blocks, etc.) for a card.
+
+**Parameters:**
+- `cardId` (required): The card ID
+
+**Example:**
+```
+Get the description and content of card xyz789
 ```
 
 ## Usage Examples
@@ -243,6 +271,34 @@ Claude: [Shows all cards in the board]
 User: "Update card xyz789, move it to 'In Progress'"
 Claude: [Updates the card's Status property]
 ```
+
+### Working with Descriptions
+
+```
+User: "Create a task in board abc123 titled 'Implement OAuth' with description 'Add Google and GitHub OAuth providers'"
+Claude: [Creates card with description]
+
+User: "Show me the description of card xyz789"
+Claude: [Retrieves and displays the card's content blocks including the description]
+
+User: "Update card xyz789 description to include implementation details"
+Claude: [Updates the card's description]
+
+User: "Add a description to card abc456 explaining the requirements"
+Claude: [Adds a new description to an existing card]
+```
+
+**Markdown Support:**
+Descriptions support full markdown formatting:
+- **Bold** and *italic* text
+- Lists (ordered and unordered)
+- Code blocks: \`inline code\` or
+  \`\`\`
+  code block
+  \`\`\`
+- Headers (# H1, ## H2, etc.)
+- Links: [text](url)
+- And more!
 
 ## How It Works
 

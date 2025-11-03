@@ -7,7 +7,8 @@ import {
   Card,
   CardPatch,
   PropertyTemplate,
-  ErrorResponse
+  ErrorResponse,
+  Block
 } from './types.js';
 
 export class FocalboardClient {
@@ -348,5 +349,98 @@ export class FocalboardClient {
     };
 
     return this.updateCard(boardId, cardId, patch);
+  }
+
+  /**
+   * Create a text block (description) for a card
+   * Returns the created text block
+   */
+  async createTextBlock(boardId: string, cardId: string, text: string): Promise<Block> {
+    const textBlock = {
+      boardId,
+      parentId: cardId,
+      type: 'text',
+      schema: 1,
+      title: text,
+      fields: {},
+      createAt: Date.now(),
+      updateAt: Date.now(),
+      deleteAt: 0,
+      createdBy: '',
+      modifiedBy: '',
+      limited: false
+    };
+
+    // Create the text block
+    const createdBlocks = await this.makeRequest<Block[]>(
+      `/boards/${boardId}/blocks`,
+      'POST',
+      [textBlock]
+    );
+
+    const createdBlock = createdBlocks[0];
+
+    // Get the current card to update its contentOrder
+    const card = await this.getCard(cardId);
+    const contentOrder = (card.fields?.contentOrder || []) as string[];
+    contentOrder.push(createdBlock.id);
+
+    // Update the card's contentOrder
+    await this.updateCard(boardId, cardId, {
+      updatedFields: {
+        contentOrder
+      }
+    });
+
+    return createdBlock;
+  }
+
+  /**
+   * Get all content blocks (text blocks, etc.) for a card
+   */
+  async getCardContent(cardId: string): Promise<Block[]> {
+    const card = await this.getCard(cardId);
+
+    // Fetch blocks with parent_id parameter
+    const blocks = await this.makeRequest<Block[]>(
+      `/boards/${card.boardId}/blocks`,
+      'GET',
+      undefined,
+      { parent_id: cardId }
+    );
+
+    return blocks;
+  }
+
+  /**
+   * Update or set the description of a card
+   * If a text block already exists, it updates it; otherwise creates a new one
+   */
+  async setCardDescription(boardId: string, cardId: string, description: string): Promise<Block> {
+    // Get existing content blocks
+    const contentBlocks = await this.getCardContent(cardId);
+    const textBlocks = contentBlocks.filter(block => block.type === 'text');
+
+    if (textBlocks.length > 0) {
+      // Update the first text block directly
+      const textBlock = textBlocks[0];
+      await this.makeRequest<void>(
+        `/boards/${boardId}/blocks/${textBlock.id}`,
+        'PATCH',
+        { title: description }
+      );
+
+      // Fetch and return the updated block
+      const updatedBlocks = await this.makeRequest<Block[]>(
+        `/boards/${boardId}/blocks`,
+        'GET',
+        undefined,
+        { block_id: textBlock.id }
+      );
+      return updatedBlocks[0];
+    } else {
+      // Create a new text block
+      return this.createTextBlock(boardId, cardId, description);
+    }
   }
 }

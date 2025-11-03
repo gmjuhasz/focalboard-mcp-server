@@ -78,7 +78,7 @@ const tools: Tool[] = [
   },
   {
     name: 'create_card',
-    description: 'Create a new card (task) in a board. You can set the title, properties, and column placement.',
+    description: 'Create a new card (task) in a board. You can set the title, properties, description, and column placement.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -96,6 +96,10 @@ const tools: Tool[] = [
           additionalProperties: {
             type: 'string'
           }
+        },
+        description: {
+          type: 'string',
+          description: 'Optional description/content for the card in markdown format'
         }
       },
       required: ['boardId', 'title']
@@ -163,6 +167,10 @@ const tools: Tool[] = [
           additionalProperties: {
             type: 'string'
           }
+        },
+        description: {
+          type: 'string',
+          description: 'Update or set the description/content for the card in markdown format (optional)'
         }
       },
       required: ['cardId', 'boardId']
@@ -184,6 +192,42 @@ const tools: Tool[] = [
         }
       },
       required: ['cardId', 'boardId']
+    }
+  },
+  {
+    name: 'add_card_description',
+    description: 'Add or set description/content to a card. Creates a new text block with markdown content.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cardId: {
+          type: 'string',
+          description: 'The ID of the card to add description to'
+        },
+        boardId: {
+          type: 'string',
+          description: 'The ID of the board the card belongs to'
+        },
+        description: {
+          type: 'string',
+          description: 'The description content in markdown format'
+        }
+      },
+      required: ['cardId', 'boardId', 'description']
+    }
+  },
+  {
+    name: 'get_card_content',
+    description: 'Get all content blocks (descriptions) for a card.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cardId: {
+          type: 'string',
+          description: 'The ID of the card to get content for'
+        }
+      },
+      required: ['cardId']
     }
   }
 ];
@@ -270,6 +314,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const boardId = args?.boardId as string;
         const title = args?.title as string;
         const properties = (args?.properties as Record<string, string>) || {};
+        const description = args?.description as string | undefined;
 
         if (!boardId || !title) {
           throw new Error('boardId and title are required');
@@ -289,6 +334,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // If properties are provided, update the card with them
         if (Object.keys(properties).length > 0) {
           card = await focalboard.updateCardProperties(card.id, boardId, properties);
+        }
+
+        // If description is provided, add it as a text block
+        if (description) {
+          await focalboard.createTextBlock(boardId, card.id, description);
+          // Refresh card to get updated contentOrder
+          card = await focalboard.getCard(card.id);
         }
 
         return {
@@ -342,28 +394,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const boardId = args?.boardId as string;
         const title = args?.title as string;
         const properties = (args?.properties as Record<string, string>) || {};
+        const description = args?.description as string | undefined;
 
         if (!cardId || !boardId) {
           throw new Error('cardId and boardId are required');
         }
 
+        if (!title && Object.keys(properties).length === 0 && !description) {
+          throw new Error('Either title, properties, or description must be provided');
+        }
+
         let card;
 
-        // If only title is being updated
-        if (title && Object.keys(properties).length === 0) {
+        // Update title if provided
+        if (title) {
           card = await focalboard.updateCard(boardId, cardId, { title });
         }
-        // If properties are being updated
-        else if (Object.keys(properties).length > 0) {
-          card = await focalboard.updateCardProperties(cardId, boardId, properties);
 
-          // Also update title if provided
-          if (title) {
-            card = await focalboard.updateCard(boardId, cardId, { title });
-          }
-        } else {
-          throw new Error('Either title or properties must be provided');
+        // Update properties if provided
+        if (Object.keys(properties).length > 0) {
+          card = await focalboard.updateCardProperties(cardId, boardId, properties);
         }
+
+        // Update description if provided
+        if (description) {
+          await focalboard.setCardDescription(boardId, cardId, description);
+        }
+
+        // Fetch the updated card
+        card = await focalboard.getCard(cardId);
 
         return {
           content: [
@@ -389,6 +448,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: JSON.stringify({ success: true, message: 'Card deleted successfully' })
+            }
+          ]
+        };
+      }
+
+      case 'add_card_description': {
+        const cardId = args?.cardId as string;
+        const boardId = args?.boardId as string;
+        const description = args?.description as string;
+
+        if (!cardId || !boardId || !description) {
+          throw new Error('cardId, boardId, and description are required');
+        }
+
+        await focalboard.setCardDescription(boardId, cardId, description);
+        const card = await focalboard.getCard(cardId);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(card, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'get_card_content': {
+        const cardId = args?.cardId as string;
+
+        if (!cardId) {
+          throw new Error('cardId is required');
+        }
+
+        const contentBlocks = await focalboard.getCardContent(cardId);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(contentBlocks, null, 2)
             }
           ]
         };
