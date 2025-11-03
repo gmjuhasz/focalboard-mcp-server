@@ -370,7 +370,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // If only title is being updated
         if (title && Object.keys(properties).length === 0) {
-          card = await focalboard.updateCard(cardId, { title });
+          card = await focalboard.updateCard(boardId, cardId, { title });
         }
         // If properties are being updated
         else if (Object.keys(properties).length > 0) {
@@ -378,7 +378,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
           // Also update title if provided
           if (title) {
-            card = await focalboard.updateCard(cardId, { title });
+            card = await focalboard.updateCard(boardId, cardId, { title });
           }
         } else {
           throw new Error('Either title or properties must be provided');

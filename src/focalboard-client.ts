@@ -7,8 +7,7 @@ import {
   Card,
   CardPatch,
   PropertyTemplate,
-  ErrorResponse,
-  SearchBoardsRequest
+  ErrorResponse
 } from './types.js';
 
 export class FocalboardClient {
@@ -40,7 +39,8 @@ export class FocalboardClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
       },
       body: JSON.stringify(loginPayload)
     });
@@ -162,7 +162,6 @@ export class FocalboardClient {
    * Search boards within a team
    */
   async searchBoards(teamId: string, term: string): Promise<Board[]> {
-    const searchRequest: SearchBoardsRequest = { term };
     return this.makeRequest<Board[]>(
       `/teams/${teamId}/boards/search`,
       'GET',
@@ -239,9 +238,9 @@ export class FocalboardClient {
   /**
    * Update a card
    */
-  async updateCard(cardId: string, patch: CardPatch): Promise<Card> {
+  async updateCard(boardId: string, cardId: string, patch: CardPatch): Promise<Card> {
     return this.makeRequest<Card>(
-      `/cards/${cardId}/cards`,
+      `/boards/${boardId}/blocks/${cardId}`,
       'PATCH',
       patch
     );
@@ -291,7 +290,7 @@ export class FocalboardClient {
       }
     };
 
-    return this.updateCard(cardId, patch);
+    return this.updateCard(boardId, cardId, patch);
   }
 
   /**
@@ -331,6 +330,6 @@ export class FocalboardClient {
       }
     };
 
-    return this.updateCard(cardId, patch);
+    return this.updateCard(boardId, cardId, patch);
   }
 }
