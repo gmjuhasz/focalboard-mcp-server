@@ -220,30 +220,47 @@ export class FocalboardClient {
   async createCard(boardId: string, card: Partial<Card>): Promise<Card> {
     const newCard = {
       boardId,
+      parentId: card.parentId || boardId,
       type: 'card',
       schema: 1,
       title: card.title || '',
-      fields: card.fields || { properties: {}, contentOrder: [] },
-      parentId: card.parentId || '',
-      ...card
+      fields: card.fields || {
+        properties: {},
+        contentOrder: [],
+        icon: '',
+        isTemplate: false
+      },
+      createAt: Date.now(),
+      updateAt: Date.now(),
+      deleteAt: 0,
+      createdBy: '',
+      modifiedBy: '',
+      limited: false
     };
 
-    return this.makeRequest<Card>(
-      `/boards/${boardId}/cards`,
+    // The /blocks endpoint expects an array and returns an array
+    const createdCards = await this.makeRequest<Card[]>(
+      `/boards/${boardId}/blocks`,
       'POST',
-      newCard
+      [newCard]
     );
+
+    // Return the first (and only) created card
+    return createdCards[0];
   }
 
   /**
    * Update a card
    */
   async updateCard(boardId: string, cardId: string, patch: CardPatch): Promise<Card> {
-    return this.makeRequest<Card>(
+    await this.makeRequest<void>(
       `/boards/${boardId}/blocks/${cardId}`,
       'PATCH',
       patch
     );
+
+    // Fetch and return the updated card since PATCH returns empty
+    return this.getCard(cardId);
   }
 
   /**

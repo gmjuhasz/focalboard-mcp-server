@@ -275,8 +275,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error('boardId and title are required');
         }
 
-        // If properties are provided, resolve them to IDs
-        let cardData: any = {
+        // Create the card first
+        const cardData: any = {
           title,
           fields: {
             properties: {},
@@ -284,32 +284,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
         };
 
+        let card = await focalboard.createCard(boardId, cardData);
+
+        // If properties are provided, update the card with them
         if (Object.keys(properties).length > 0) {
-          const board = await focalboard.getBoard(boardId);
-          const resolvedProperties: Record<string, string> = {};
-
-          for (const [propName, value] of Object.entries(properties)) {
-            const property = focalboard.findPropertyByName(board, propName);
-            if (!property) {
-              throw new Error(`Property '${propName}' not found on board`);
-            }
-
-            // For select/multiSelect types, resolve option ID
-            if (property.type === 'select' || property.type === 'multiSelect') {
-              const optionId = focalboard.findPropertyOption(property, value);
-              if (!optionId) {
-                throw new Error(`Option '${value}' not found in property '${propName}'`);
-              }
-              resolvedProperties[property.id] = optionId;
-            } else {
-              resolvedProperties[property.id] = value;
-            }
-          }
-
-          cardData.fields.properties = resolvedProperties;
+          card = await focalboard.updateCardProperties(card.id, boardId, properties);
         }
 
-        const card = await focalboard.createCard(boardId, cardData);
         return {
           content: [
             {
