@@ -20,8 +20,8 @@ The easiest way to install is using the Claude CLI:
 # From local directory
 claude mcp add /path/to/focalboard-mcp-server
 
-# Or from GitHub (once published)
-claude mcp add https://github.com/yourusername/focalboard-mcp-server
+# Or from GitHub
+claude mcp add https://github.com/gmjuhasz/focalboard-mcp-server
 ```
 
 After adding, you'll be prompted to configure the environment variables:
