@@ -1,0 +1,30 @@
+{
+  "name": "focalboard-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for Focalboard task management",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "focalboard-mcp-server": "build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "watch": "tsc --watch"
+  },
+  "keywords": [
+    "mcp",
+    "focalboard",
+    "task-management"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  }
+}
