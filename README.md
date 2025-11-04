@@ -2,6 +2,10 @@
 
 A Model Context Protocol (MCP) server for [Focalboard](https://github.com/mattermost-community/focalboard), enabling task and board management through Claude and other MCP-compatible clients.
 
+<a href="https://glama.ai/mcp/servers/@gmjuhasz/focalboard-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@gmjuhasz/focalboard-mcp-server/badge" alt="Focalboard Server MCP server" />
+</a>
+
 ## Features
 
 - **Board Management**: List, search, and view board details
