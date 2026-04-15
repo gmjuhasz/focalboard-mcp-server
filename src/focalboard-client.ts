@@ -8,7 +8,8 @@ import {
   CardPatch,
   PropertyTemplate,
   ErrorResponse,
-  Block
+  Block,
+  Team
 } from './types.js';
 
 export class FocalboardClient {
@@ -166,6 +167,13 @@ export class FocalboardClient {
   // ====================
 
   /**
+   * List teams the current user can access (Mattermost: all member teams; standalone: root team(s)).
+   */
+  async listTeams(): Promise<Team[]> {
+    return this.makeRequest<Team[]>('/teams');
+  }
+
+  /**
    * List all boards for a team
    */
   async listBoards(teamId: string = '0'): Promise<Board[]> {
@@ -271,9 +279,41 @@ export class FocalboardClient {
   }
 
   /**
+   * Reads card custom properties from API shape (`fields.properties` or top-level `properties`).
+   * Focalboard PATCH replaces the whole `properties` map when only a subset is sent, so callers merge here.
+   */
+  private getCardPropertiesSnapshot(card: Card): Record<string, string | string[]> {
+    const fromFields = card.fields?.properties;
+    if (fromFields && typeof fromFields === 'object' && !Array.isArray(fromFields)) {
+      return { ...(fromFields as Record<string, string | string[]>) };
+    }
+    const top = (card as unknown as { properties?: Record<string, string | string[]> }).properties;
+    if (top && typeof top === 'object' && !Array.isArray(top)) {
+      return { ...top };
+    }
+    return {};
+  }
+
+  /**
    * Update a card
    */
   async updateCard(boardId: string, cardId: string, patch: CardPatch): Promise<Card> {
+    const incoming = patch.updatedFields?.properties;
+    if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+      const current = await this.getCard(cardId);
+      const merged = {
+        ...this.getCardPropertiesSnapshot(current),
+        ...(incoming as Record<string, string | string[]>),
+      };
+      patch = {
+        ...patch,
+        updatedFields: {
+          ...patch.updatedFields,
+          properties: merged,
+        },
+      };
+    }
+
     await this.makeRequest<void>(
       `/boards/${boardId}/blocks/${cardId}`,
       'PATCH',

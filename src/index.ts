@@ -46,15 +46,30 @@ const focalboard = new FocalboardClient(config);
 // Define MCP tools
 const tools: Tool[] = [
   {
+    name: 'list_teams',
+    description:
+      'List teams the authenticated user can access. Each item includes `id` (use as `teamId` for list_boards / search_boards) and `title`. Optional `titleContains` filters by team name.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        titleContains: {
+          type: 'string',
+          description: 'Optional case-insensitive substring; only teams whose title matches are returned.',
+        },
+      },
+    },
+  },
+  {
     name: 'list_boards',
-    description: 'List all boards for a team. Returns an array of boards with their IDs, titles, and properties.',
+    description:
+      'List all boards for a team. Returns an array of boards with their IDs, titles, and properties. On Mattermost Boards, call list_teams first to get `teamId`, or take it from the board URL (/boards/team/<teamId>/...).',
     inputSchema: {
       type: 'object',
       properties: {
         teamId: {
           type: 'string',
           description:
-            'Team ID: use "0" for standalone Focalboard default team; for Mattermost Boards use the real team id from the board URL (/boards/team/<teamId>/...).',
+            'Team ID: use "0" for standalone Focalboard default team; for Mattermost Boards use `id` from list_teams or the board URL (/boards/team/<teamId>/...).',
           default: '0'
         }
       }
@@ -83,7 +98,7 @@ const tools: Tool[] = [
         teamId: {
           type: 'string',
           description:
-            'Team ID: "0" for standalone default team; Mattermost Boards needs the team id from the URL.',
+            'Team ID: "0" for standalone default team; Mattermost Boards: use `id` from list_teams or the board URL.',
           default: '0'
         },
         searchTerm: {
@@ -277,6 +292,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // ====================
       // Board Tools
       // ====================
+
+      case 'list_teams': {
+        const needle = ((args?.titleContains as string) || '').trim().toLowerCase();
+        let teams = await focalboard.listTeams();
+        if (needle) {
+          teams = teams.filter((t) => (t.title || '').toLowerCase().includes(needle));
+        }
+        const safe = teams.map((t) => ({
+          id: t.id,
+          title: t.title,
+          updateAt: t.updateAt,
+        }));
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(safe, null, 2),
+            },
+          ],
+        };
+      }
 
       case 'list_boards': {
         const teamId = (args?.teamId as string) || '0';
