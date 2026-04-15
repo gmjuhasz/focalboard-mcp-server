@@ -15,20 +15,34 @@ export class FocalboardClient {
   private host: string;
   private username: string;
   private password: string;
+  /** Non-null when using Mattermost PAT (or other pre-provisioned Bearer token). */
+  private readonly pat: string | null;
   private sessionToken: string | null = null;
   private readonly apiBasePath = '/api/v2';
 
   constructor(config: FocalboardConfig) {
     // Ensure host doesn't have trailing slash
     this.host = config.host.replace(/\/$/, '');
-    this.username = config.username;
-    this.password = config.password;
+    const trimmedPat = config.accessToken?.trim();
+    this.pat = trimmedPat && trimmedPat.length > 0 ? trimmedPat : null;
+    this.username = config.username ?? '';
+    this.password = config.password ?? '';
+    if (this.pat) {
+      this.sessionToken = this.pat;
+    }
+  }
+
+  private isPatMode(): boolean {
+    return this.pat !== null;
   }
 
   /**
    * Login and get session token
    */
   private async login(): Promise<void> {
+    if (this.isPatMode()) {
+      throw new Error('login() must not be called in access-token (Mattermost PAT) mode');
+    }
     const loginPayload: LoginRequest = {
       type: 'normal',
       username: this.username,
@@ -59,6 +73,10 @@ export class FocalboardClient {
    * Ensure we have a valid session token
    */
   private async ensureAuthenticated(): Promise<void> {
+    if (this.isPatMode()) {
+      this.sessionToken = this.pat;
+      return;
+    }
     if (!this.sessionToken) {
       await this.login();
     }
@@ -99,12 +117,14 @@ export class FocalboardClient {
       body: body ? JSON.stringify(body) : undefined
     });
 
-    // Handle 401 - try to re-authenticate once
+    // Handle 401 — password mode may refresh session; PAT mode must not call login()
     if (response.status === 401) {
+      if (this.isPatMode()) {
+        return this.handleResponse<T>(response);
+      }
       this.sessionToken = null;
       await this.login();
 
-      // Retry the request with new token
       headers['Authorization'] = `Bearer ${this.sessionToken}`;
       const retryResponse = await fetch(url, {
         method,

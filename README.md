@@ -87,11 +87,74 @@ Replace `/absolute/path/to/focalboard-mcp-server` with the actual path to this p
 
 ## Configuration
 
-### Required Environment Variables
+The server supports two setups: **standalone Focalboard** (username/password login) and **Mattermost Boards** (the Focalboard plugin behind Mattermost, using a Personal Access Token).
 
-- `FOCALBOARD_HOST`: The URL of your Focalboard instance (e.g., `https://focalboard.example.com`)
-- `FOCALBOARD_USERNAME`: Your Focalboard username or email
-- `FOCALBOARD_PASSWORD`: Your Focalboard password
+### Standalone Focalboard
+
+- `FOCALBOARD_HOST`: Root URL of the Focalboard server (e.g., `https://focalboard.example.com`)
+- `FOCALBOARD_USERNAME`: Username or email for `POST /api/v2/login`
+- `FOCALBOARD_PASSWORD`: Password for that account
+
+Do **not** set `FOCALBOARD_TOKEN` / `MATTERMOST_ACCESS_TOKEN` when using this mode.
+
+### Mattermost Boards (plugin)
+
+The API is still Focalboard v2, but it is mounted under the Mattermost server. Set the host to the **plugin base** (no trailing slash), not the Mattermost root alone:
+
+```text
+https://<mattermost-host>/plugins/focalboard
+```
+
+The client appends `/api/v2/...` to that base. If you use only `https://<mattermost-host>`, requests can hit Mattermost’s core API instead of Boards.
+
+Authentication uses a **Mattermost Personal Access Token** (Profile → Security → Personal Access Tokens). On many Mattermost deployments, Boards API requests with `Authorization: Bearer <PAT>` also require **`X-Requested-With: XMLHttpRequest`** so CSRF checks treat the call like an XHR; this server sends that header on **every** API request.
+
+**Environment variables (token mode):**
+
+- `FOCALBOARD_HOST`: `https://<mattermost-host>/plugins/focalboard`
+- `FOCALBOARD_TOKEN` **or** `MATTERMOST_ACCESS_TOKEN`: the PAT value (`mm_pat_...`)
+
+Username and password are optional and ignored when a token is set.
+
+**Team ID:** For `list_boards` / `search_boards`, use the **real team id** from the Boards URL (`/boards/team/<teamId>/...`), not `"0"`.
+
+**Example `curl` (operators):**
+
+```bash
+export TOKEN='mm_pat_...'
+export HOST='https://your-mattermost.example.com/plugins/focalboard'
+
+curl -sS -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Accept: application/json' \
+  -H 'X-Requested-With: XMLHttpRequest' \
+  "${HOST}/api/v2/users/me"
+```
+
+**Example MCP config (Cursor / Claude Desktop):**
+
+```json
+{
+  "mcpServers": {
+    "focalboard": {
+      "command": "node",
+      "args": ["/absolute/path/to/focalboard-mcp-server/build/index.js"],
+      "env": {
+        "FOCALBOARD_HOST": "https://your-mattermost.example.com/plugins/focalboard",
+        "FOCALBOARD_TOKEN": "mm_pat_..."
+      }
+    }
+  }
+}
+```
+
+**Security:** Treat the PAT like a password. Prefer OS-level secret storage or your client’s secret mechanism for MCP `env`; this server does not log the token.
+
+### Required environment variables (summary)
+
+| Mode | Variables |
+|------|-----------|
+| Standalone | `FOCALBOARD_HOST`, `FOCALBOARD_USERNAME`, `FOCALBOARD_PASSWORD` |
+| Mattermost Boards | `FOCALBOARD_HOST` (plugin base URL), `FOCALBOARD_TOKEN` or `MATTERMOST_ACCESS_TOKEN` |
 
 ## Available Tools
 
@@ -304,11 +367,9 @@ Descriptions support full markdown formatting:
 
 ### Authentication
 
-The server automatically handles authentication:
-1. When first called, it logs in with your username/password
-2. Receives a session token from Focalboard
-3. Uses the token for all subsequent API requests
-4. Automatically re-authenticates if the token expires
+**Standalone:** On first API use, the client calls `POST /api/v2/login` with username/password, stores the session token, sends `Authorization: Bearer` and `X-Requested-With: XMLHttpRequest` on subsequent requests, and retries login once after a `401`.
+
+**Mattermost Boards:** If `FOCALBOARD_TOKEN` or `MATTERMOST_ACCESS_TOKEN` is set, login is skipped; the PAT is sent as `Authorization: Bearer` on every request, with the same CSRF-related header. A `401` is not retried with password login.
 
 ### Column Name Resolution
 

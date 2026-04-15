@@ -11,16 +11,32 @@ import { FocalboardClient } from './focalboard-client.js';
 import { FocalboardConfig } from './types.js';
 
 // Get configuration from environment variables
-const config: FocalboardConfig = {
-  host: process.env.FOCALBOARD_HOST || '',
-  username: process.env.FOCALBOARD_USERNAME || '',
-  password: process.env.FOCALBOARD_PASSWORD || ''
-};
+const host = (process.env.FOCALBOARD_HOST || '').trim();
+const accessToken = (
+  process.env.FOCALBOARD_TOKEN ||
+  process.env.MATTERMOST_ACCESS_TOKEN ||
+  ''
+).trim();
+const username = (process.env.FOCALBOARD_USERNAME || '').trim();
+const password = (process.env.FOCALBOARD_PASSWORD || '').trim();
+
+const config: FocalboardConfig = accessToken
+  ? { host, accessToken }
+  : { host, username, password };
 
 // Validate configuration
-if (!config.host || !config.username || !config.password) {
-  console.error('Error: Missing required environment variables');
-  console.error('Required: FOCALBOARD_HOST, FOCALBOARD_USERNAME, FOCALBOARD_PASSWORD');
+if (!host) {
+  console.error('Error: FOCALBOARD_HOST is required');
+  process.exit(1);
+}
+
+if (accessToken) {
+  // Mattermost Boards / PAT mode: host + token only
+} else if (!username || !password) {
+  console.error('Error: Missing credentials for standalone Focalboard');
+  console.error(
+    'Set FOCALBOARD_USERNAME and FOCALBOARD_PASSWORD, or use FOCALBOARD_TOKEN (or MATTERMOST_ACCESS_TOKEN) for Mattermost Boards.'
+  );
   process.exit(1);
 }
 
@@ -37,7 +53,8 @@ const tools: Tool[] = [
       properties: {
         teamId: {
           type: 'string',
-          description: 'The team ID to list boards for (default: "0" for default team)',
+          description:
+            'Team ID: use "0" for standalone Focalboard default team; for Mattermost Boards use the real team id from the board URL (/boards/team/<teamId>/...).',
           default: '0'
         }
       }
@@ -65,7 +82,8 @@ const tools: Tool[] = [
       properties: {
         teamId: {
           type: 'string',
-          description: 'The team ID to search within (default: "0" for default team)',
+          description:
+            'Team ID: "0" for standalone default team; Mattermost Boards needs the team id from the URL.',
           default: '0'
         },
         searchTerm: {
