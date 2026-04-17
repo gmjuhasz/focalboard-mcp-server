@@ -111,13 +111,27 @@ export interface CardPatch {
 export interface BoardMember {
   boardId: string;
   userId: string;
-  roles: string;
-  minimumRole: string;
+  roles?: string;
+  minimumRole?: string;
   schemeAdmin: boolean;
   schemeEditor: boolean;
   schemeCommenter: boolean;
   schemeViewer: boolean;
-  synthetic: boolean;
+  synthetic?: boolean;
+}
+
+/** Board member + resolved Focalboard user profile (from POST /users). */
+export interface BoardUserRow {
+  userId: string;
+  username: string;
+  email: string;
+  firstname: string;
+  lastname: string;
+  nickname: string;
+  schemeAdmin: boolean;
+  schemeEditor: boolean;
+  schemeCommenter: boolean;
+  schemeViewer: boolean;
 }
 
 // Team represents a Focalboard team

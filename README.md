@@ -194,6 +194,20 @@ Search for boards by name or keyword.
 Search for boards with "project" in the name
 ```
 
+#### `list_board_users`
+List board members with **resolved usernames** (via `GET /boards/{boardId}/members` and `POST /users`). Use this when you need an Assignee but only know a Mattermost username.
+
+**Parameters:**
+- `boardId` (required): The board ID
+- `search` (optional): Case-insensitive substring filter (username, email, names, user id)
+
+**Assignee / person fields (`create_card` / `update_card`):**
+- **Mattermost user ID** (26 lowercase alphanumeric characters), e.g. from `list_board_users`
+- **`@username`** for a user who is a **member of that board** (exact username match, case-insensitive)
+- **Several assignees:** comma-separated ids/usernames, or a JSON array string: `["id1","id2"]`
+
+The API stores person / multiPerson values as **arrays of user IDs**; the server now sends that shape so assignees show correctly in Boards.
+
 ### Card/Task Operations
 
 #### `create_card`
@@ -202,7 +216,7 @@ Create a new card (task) in a board with optional description.
 **Parameters:**
 - `boardId` (required): The board ID
 - `title` (required): Card title
-- `properties` (optional): Property values as key-value pairs using property names
+- `properties` (optional): Property values as key-value pairs using property names (see **Assignee** above)
 - `description` (optional): Card description in markdown format
 
 **Example:**
@@ -241,7 +255,7 @@ Update a card's properties, title, and/or description.
 - `cardId` (required): The card ID
 - `boardId` (required): The board ID
 - `title` (optional): New title
-- `properties` (optional): Property values to update using property names
+- `properties` (optional): Property values to update using property names (see **list_board_users** / Assignee above)
 - `description` (optional): Update or set the card description in markdown format
 
 **Example:**

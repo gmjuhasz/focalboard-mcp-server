@@ -110,6 +110,26 @@ const tools: Tool[] = [
     }
   },
   {
+    name: 'list_board_users',
+    description:
+      'List users who are members of a board with usernames, emails, and role flags. Optional `search` filters by substring (username, email, name, user id). Use this to resolve Assignee / Reviewer without pasting Mattermost user IDs. Person fields also accept `@username` or a 26-char user id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: {
+          type: 'string',
+          description: 'The board ID (same as get_board / create_card).',
+        },
+        search: {
+          type: 'string',
+          description:
+            'Optional case-insensitive substring; filters the list (username, email, first/last name, nickname, userId).',
+        },
+      },
+      required: ['boardId'],
+    },
+  },
+  {
     name: 'create_card',
     description: 'Create a new card (task) in a board. You can set the title, properties, description, and column placement.',
     inputSchema: {
@@ -125,7 +145,8 @@ const tools: Tool[] = [
         },
         properties: {
           type: 'object',
-          description: 'Property values for the card (e.g., {"Status": "To Do", "Priority": "High"}). Use property names, not IDs.',
+          description:
+            'Property values for the card (e.g., {"Status": "To Do", "Priority": "High", "Assignee": "@sara"}). Use property names, not IDs. For Assignee / person fields: Mattermost user id (26 chars), @username of a board member, comma-separated ids, or JSON array ["id1","id2"].',
           additionalProperties: {
             type: 'string'
           }
@@ -196,7 +217,8 @@ const tools: Tool[] = [
         },
         properties: {
           type: 'object',
-          description: 'Property values to update (e.g., {"Status": "In Progress", "Priority": "High"}). Use property names, not IDs.',
+          description:
+            'Property values to update (e.g., {"Status": "In Progress", "Assignee": "@mohammad"}). Use property names, not IDs. Assignee / person: user id, @username (board member), comma-separated, or JSON array.',
           additionalProperties: {
             type: 'string'
           }
@@ -357,6 +379,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: JSON.stringify(boards, null, 2)
             }
           ]
+        };
+      }
+
+      case 'list_board_users': {
+        const boardId = args?.boardId as string;
+        const search = (args?.search as string) || undefined;
+        if (!boardId) {
+          throw new Error('boardId is required');
+        }
+        const rows = await focalboard.listBoardUsers(boardId, search);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(rows, null, 2),
+            },
+          ],
         };
       }
 

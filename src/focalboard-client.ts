@@ -4,12 +4,15 @@ import {
   LoginRequest,
   LoginResponse,
   Board,
+  BoardMember,
+  BoardUserRow,
   Card,
   CardPatch,
   PropertyTemplate,
   ErrorResponse,
   Block,
-  Team
+  Team,
+  User,
 } from './types.js';
 
 export class FocalboardClient {
@@ -185,6 +188,67 @@ export class FocalboardClient {
    */
   async getBoard(boardId: string): Promise<Board> {
     return this.makeRequest<Board>(`/boards/${boardId}`);
+  }
+
+  /**
+   * Board members (roles only). Use {@link listBoardUsers} for usernames.
+   */
+  async getBoardMembers(boardId: string): Promise<BoardMember[]> {
+    return this.makeRequest<BoardMember[]>(`/boards/${boardId}/members`);
+  }
+
+  /**
+   * Resolve user profiles for a list of Mattermost / Focalboard user IDs.
+   */
+  async getUsersByIds(userIds: string[]): Promise<User[]> {
+    if (userIds.length === 0) {
+      return [];
+    }
+    return this.makeRequest<User[]>('/users', 'POST', userIds);
+  }
+
+  /**
+   * Members of a board with usernames (and optional substring filter).
+   */
+  async listBoardUsers(boardId: string, query?: string): Promise<BoardUserRow[]> {
+    const members = await this.getBoardMembers(boardId);
+    const userIds = [
+      ...new Set(
+        members
+          .map((m) => (m as { userId?: string; user_id?: string }).userId ?? (m as { user_id?: string }).user_id)
+          .filter(Boolean) as string[]
+      ),
+    ];
+    let users: User[] = [];
+    if (userIds.length > 0) {
+      users = await this.getUsersByIds(userIds);
+    }
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const needle = (query ?? '').trim().toLowerCase();
+    const rows: BoardUserRow[] = members.map((m) => {
+      const userId =
+        (m as { userId?: string; user_id?: string }).userId ?? (m as { user_id?: string }).user_id ?? '';
+      const u = userId ? byId.get(userId) : undefined;
+      return {
+        userId,
+        username: u?.username ?? '',
+        email: u?.email ?? '',
+        firstname: u?.firstname ?? '',
+        lastname: u?.lastname ?? '',
+        nickname: u?.nickname ?? '',
+        schemeAdmin: !!m.schemeAdmin,
+        schemeEditor: !!m.schemeEditor,
+        schemeCommenter: !!m.schemeCommenter,
+        schemeViewer: !!m.schemeViewer,
+      };
+    });
+    if (!needle) {
+      return rows;
+    }
+    return rows.filter((r) => {
+      const hay = [r.userId, r.username, r.email, r.firstname, r.lastname, r.nickname].join(' ').toLowerCase();
+      return hay.includes(needle);
+    });
   }
 
   /**
@@ -372,6 +436,75 @@ export class FocalboardClient {
   }
 
   /**
+   * Mattermost-style user IDs used by Boards are typically 26 lowercase alphanumerics.
+   */
+  private looksLikeMattermostUserId(token: string): boolean {
+    const t = token.trim();
+    return /^[a-z0-9]{26}$/.test(t);
+  }
+
+  /**
+   * Split person / multiPerson property value into raw tokens (IDs or @username / username).
+   */
+  private parsePersonPropertyTokens(value: string): string[] {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
+    }
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (Array.isArray(parsed)) {
+          return (parsed as unknown[]).map((x) => String(x).trim()).filter(Boolean);
+        }
+        return [String(parsed).trim()];
+      } catch {
+        throw new Error(
+          `Invalid JSON for person property: expected a JSON array of user IDs or usernames`
+        );
+      }
+    }
+    return trimmed.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+  }
+
+  private resolvePersonTokenToUserId(token: string, boardUsers: BoardUserRow[]): string {
+    const t = token.trim();
+    if (!t) {
+      throw new Error('Empty person / assignee token');
+    }
+    if (this.looksLikeMattermostUserId(t)) {
+      return t;
+    }
+    const uname = t.replace(/^@/, '').toLowerCase();
+    const matches = boardUsers.filter((row) => row.username.toLowerCase() === uname);
+    if (matches.length === 1) {
+      return matches[0].userId;
+    }
+    if (matches.length === 0) {
+      throw new Error(
+        `No board member with username "${uname}". Use list_board_users, or pass the Mattermost user ID (26 chars).`
+      );
+    }
+    throw new Error(`Ambiguous username "${uname}"`);
+  }
+
+  private resolvePersonPropertyValue(
+    value: string,
+    multi: boolean,
+    boardUsers: BoardUserRow[]
+  ): string[] {
+    const tokens = this.parsePersonPropertyTokens(value);
+    if (tokens.length === 0) {
+      throw new Error('Person property requires at least one user ID or @username');
+    }
+    if (!multi && tokens.length > 1) {
+      throw new Error('Person property accepts only one user (use multiPerson / Assignee for several users)');
+    }
+    const toResolve = multi ? tokens : tokens.slice(0, 1);
+    return toResolve.map((tok) => this.resolvePersonTokenToUserId(tok, boardUsers));
+  }
+
+  /**
    * Update card properties with friendly names
    * Accepts property names and values, resolves to IDs internally
    */
@@ -381,7 +514,13 @@ export class FocalboardClient {
     properties: Record<string, string>
   ): Promise<Card> {
     const board = await this.getBoard(boardId);
-    const propertyUpdates: Record<string, string> = {};
+    const propertyUpdates: Record<string, string | string[]> = {};
+
+    const needsBoardUsers = Object.keys(properties).some((propName) => {
+      const property = this.findPropertyByName(board, propName);
+      return property?.type === 'multiPerson' || property?.type === 'person';
+    });
+    const boardUsers = needsBoardUsers ? await this.listBoardUsers(boardId) : [];
 
     for (const [propName, value] of Object.entries(properties)) {
       const property = this.findPropertyByName(board, propName);
@@ -396,6 +535,11 @@ export class FocalboardClient {
           throw new Error(`Option '${value}' not found in property '${propName}'`);
         }
         propertyUpdates[property.id] = optionId;
+      } else if (property.type === 'multiPerson') {
+        propertyUpdates[property.id] = this.resolvePersonPropertyValue(value, true, boardUsers);
+      } else if (property.type === 'person') {
+        const ids = this.resolvePersonPropertyValue(value, false, boardUsers);
+        propertyUpdates[property.id] = ids[0];
       } else {
         // For other types, use the value directly
         propertyUpdates[property.id] = value;
