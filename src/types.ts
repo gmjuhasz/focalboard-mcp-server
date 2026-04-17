@@ -5,8 +5,15 @@
 
 export interface FocalboardConfig {
   host: string;
-  username: string;
-  password: string;
+  /** Standalone Focalboard: username for POST /api/v2/login. Ignored when accessToken is set. */
+  username?: string;
+  /** Standalone Focalboard: password for POST /api/v2/login. Ignored when accessToken is set. */
+  password?: string;
+  /**
+   * Mattermost Boards (plugin): Personal Access Token (or equivalent Bearer token).
+   * When set, login is skipped and this value is sent as Authorization Bearer on every request.
+   */
+  accessToken?: string;
 }
 
 export interface LoginRequest {
@@ -104,13 +111,27 @@ export interface CardPatch {
 export interface BoardMember {
   boardId: string;
   userId: string;
-  roles: string;
-  minimumRole: string;
+  roles?: string;
+  minimumRole?: string;
   schemeAdmin: boolean;
   schemeEditor: boolean;
   schemeCommenter: boolean;
   schemeViewer: boolean;
-  synthetic: boolean;
+  synthetic?: boolean;
+}
+
+/** Board member + resolved Focalboard user profile (from POST /users). */
+export interface BoardUserRow {
+  userId: string;
+  username: string;
+  email: string;
+  firstname: string;
+  lastname: string;
+  nickname: string;
+  schemeAdmin: boolean;
+  schemeEditor: boolean;
+  schemeCommenter: boolean;
+  schemeViewer: boolean;
 }
 
 // Team represents a Focalboard team

@@ -11,16 +11,32 @@ import { FocalboardClient } from './focalboard-client.js';
 import { FocalboardConfig } from './types.js';
 
 // Get configuration from environment variables
-const config: FocalboardConfig = {
-  host: process.env.FOCALBOARD_HOST || '',
-  username: process.env.FOCALBOARD_USERNAME || '',
-  password: process.env.FOCALBOARD_PASSWORD || ''
-};
+const host = (process.env.FOCALBOARD_HOST || '').trim();
+const accessToken = (
+  process.env.FOCALBOARD_TOKEN ||
+  process.env.MATTERMOST_ACCESS_TOKEN ||
+  ''
+).trim();
+const username = (process.env.FOCALBOARD_USERNAME || '').trim();
+const password = (process.env.FOCALBOARD_PASSWORD || '').trim();
+
+const config: FocalboardConfig = accessToken
+  ? { host, accessToken }
+  : { host, username, password };
 
 // Validate configuration
-if (!config.host || !config.username || !config.password) {
-  console.error('Error: Missing required environment variables');
-  console.error('Required: FOCALBOARD_HOST, FOCALBOARD_USERNAME, FOCALBOARD_PASSWORD');
+if (!host) {
+  console.error('Error: FOCALBOARD_HOST is required');
+  process.exit(1);
+}
+
+if (accessToken) {
+  // Mattermost Boards / PAT mode: host + token only
+} else if (!username || !password) {
+  console.error('Error: Missing credentials for standalone Focalboard');
+  console.error(
+    'Set FOCALBOARD_USERNAME and FOCALBOARD_PASSWORD, or use FOCALBOARD_TOKEN (or MATTERMOST_ACCESS_TOKEN) for Mattermost Boards.'
+  );
   process.exit(1);
 }
 
@@ -30,14 +46,30 @@ const focalboard = new FocalboardClient(config);
 // Define MCP tools
 const tools: Tool[] = [
   {
+    name: 'list_teams',
+    description:
+      'List teams the authenticated user can access. Each item includes `id` (use as `teamId` for list_boards / search_boards) and `title`. Optional `titleContains` filters by team name.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        titleContains: {
+          type: 'string',
+          description: 'Optional case-insensitive substring; only teams whose title matches are returned.',
+        },
+      },
+    },
+  },
+  {
     name: 'list_boards',
-    description: 'List all boards for a team. Returns an array of boards with their IDs, titles, and properties.',
+    description:
+      'List all boards for a team. Returns an array of boards with their IDs, titles, and properties. On Mattermost Boards, call list_teams first to get `teamId`, or take it from the board URL (/boards/team/<teamId>/...).',
     inputSchema: {
       type: 'object',
       properties: {
         teamId: {
           type: 'string',
-          description: 'The team ID to list boards for (default: "0" for default team)',
+          description:
+            'Team ID: use "0" for standalone Focalboard default team; for Mattermost Boards use `id` from list_teams or the board URL (/boards/team/<teamId>/...).',
           default: '0'
         }
       }
@@ -65,7 +97,8 @@ const tools: Tool[] = [
       properties: {
         teamId: {
           type: 'string',
-          description: 'The team ID to search within (default: "0" for default team)',
+          description:
+            'Team ID: "0" for standalone default team; Mattermost Boards: use `id` from list_teams or the board URL.',
           default: '0'
         },
         searchTerm: {
@@ -75,6 +108,26 @@ const tools: Tool[] = [
       },
       required: ['searchTerm']
     }
+  },
+  {
+    name: 'list_board_users',
+    description:
+      'List users who are members of a board with usernames, emails, and role flags. Optional `search` filters by substring (username, email, name, user id). Use this to resolve Assignee / Reviewer without pasting Mattermost user IDs. Person fields also accept `@username` or a 26-char user id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: {
+          type: 'string',
+          description: 'The board ID (same as get_board / create_card).',
+        },
+        search: {
+          type: 'string',
+          description:
+            'Optional case-insensitive substring; filters the list (username, email, first/last name, nickname, userId).',
+        },
+      },
+      required: ['boardId'],
+    },
   },
   {
     name: 'create_card',
@@ -92,7 +145,8 @@ const tools: Tool[] = [
         },
         properties: {
           type: 'object',
-          description: 'Property values for the card (e.g., {"Status": "To Do", "Priority": "High"}). Use property names, not IDs.',
+          description:
+            'Property values for the card (e.g., {"Status": "To Do", "Priority": "High", "Assignee": "@sara"}). Use property names, not IDs. For Assignee / person fields: Mattermost user id (26 chars), @username of a board member, comma-separated ids, or JSON array ["id1","id2"].',
           additionalProperties: {
             type: 'string'
           }
@@ -163,7 +217,8 @@ const tools: Tool[] = [
         },
         properties: {
           type: 'object',
-          description: 'Property values to update (e.g., {"Status": "In Progress", "Priority": "High"}). Use property names, not IDs.',
+          description:
+            'Property values to update (e.g., {"Status": "In Progress", "Assignee": "@mohammad"}). Use property names, not IDs. Assignee / person: user id, @username (board member), comma-separated, or JSON array.',
           additionalProperties: {
             type: 'string'
           }
@@ -260,6 +315,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Board Tools
       // ====================
 
+      case 'list_teams': {
+        const needle = ((args?.titleContains as string) || '').trim().toLowerCase();
+        let teams = await focalboard.listTeams();
+        if (needle) {
+          teams = teams.filter((t) => (t.title || '').toLowerCase().includes(needle));
+        }
+        const safe = teams.map((t) => ({
+          id: t.id,
+          title: t.title,
+          updateAt: t.updateAt,
+        }));
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(safe, null, 2),
+            },
+          ],
+        };
+      }
+
       case 'list_boards': {
         const teamId = (args?.teamId as string) || '0';
         const boards = await focalboard.listBoards(teamId);
@@ -303,6 +379,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: JSON.stringify(boards, null, 2)
             }
           ]
+        };
+      }
+
+      case 'list_board_users': {
+        const boardId = args?.boardId as string;
+        const search = (args?.search as string) || undefined;
+        if (!boardId) {
+          throw new Error('boardId is required');
+        }
+        const rows = await focalboard.listBoardUsers(boardId, search);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(rows, null, 2),
+            },
+          ],
         };
       }
 
